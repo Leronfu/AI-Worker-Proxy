@@ -87,7 +87,13 @@ export interface OpenAIStreamChunk {
 
 // Provider configuration
 export interface ProviderConfig {
-  provider: 'anthropic' | 'anthropic-compatible' | 'google' | 'openai' | 'openai-compatible' | 'cloudflare-ai';
+  provider:
+    | 'anthropic'
+    | 'anthropic-compatible'
+    | 'google'
+    | 'openai'
+    | 'openai-compatible'
+    | 'cloudflare-ai';
   model: string;
   apiKeys: string[];
   baseUrl?: string;
