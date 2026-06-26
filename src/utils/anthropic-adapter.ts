@@ -1,17 +1,11 @@
-import {
-  AnthropicRequest,
-  AnthropicResponse,
-  AnthropicContentBlock,
-} from '../anthropic-types';
+import { AnthropicRequest, AnthropicResponse, AnthropicContentBlock } from '../anthropic-types';
 import { OpenAIChatRequest, OpenAIChatResponse, OpenAIMessage } from '../types';
 
 /**
  * Convert an Anthropic-format request to OpenAI-format request.
  * Used when the target provider is NOT anthropic-compatible.
  */
-export function convertAnthropicRequestToOpenAI(
-  anthropicReq: AnthropicRequest
-): OpenAIChatRequest {
+export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest): OpenAIChatRequest {
   const messages: OpenAIMessage[] = [];
 
   // Extract system message
@@ -31,9 +25,7 @@ export function convertAnthropicRequestToOpenAI(
           textParts.push(block.text);
         } else if (block.type === 'image' && block.source) {
           // Convert Anthropic image block to OpenAI image_url format
-          textParts.push(
-            `data:${block.source.media_type};base64,${block.source.data}`
-          );
+          textParts.push(`data:${block.source.media_type};base64,${block.source.data}`);
         } else if (block.type === 'tool_result') {
           // Tool results in Anthropic are content blocks in user messages;
           // in OpenAI they are separate messages with role 'tool'
@@ -322,9 +314,7 @@ export class AnthropicStreamAdapter {
               })
             );
 
-            controller.enqueue(
-              this.encodeSSE('message_stop', { type: 'message_stop' })
-            );
+            controller.enqueue(this.encodeSSE('message_stop', { type: 'message_stop' }));
           }
         }
       },

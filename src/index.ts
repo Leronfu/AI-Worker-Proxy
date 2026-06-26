@@ -132,9 +132,7 @@ async function handleAnthropicChat(request: Request, env: Env): Promise<Response
     throw new ProxyError('Invalid request: model is required', 400);
   }
 
-  console.log(
-    `[AnthropicHandler] model=${body.model} stream=${body.stream || false}`
-  );
+  console.log(`[AnthropicHandler] model=${body.model} stream=${body.stream || false}`);
 
   const router = new Router(env);
   const providers = router.getProvidersForModel(body.model);
