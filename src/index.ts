@@ -148,7 +148,7 @@ async function handleAnthropicChat(request: Request, env: Env): Promise<Response
     return handleAnthropicNativePath(body, providers, env);
   }
 
-  return handleAnthropicConversionPath(body, router, env);
+  return handleAnthropicConversionPath(body, router);
 }
 
 /**
@@ -203,7 +203,7 @@ async function handleAnthropicNativePath(
   );
   if (otherProviders.length > 0) {
     const router = new Router(env);
-    return handleAnthropicConversionPath(body, router, env);
+    return handleAnthropicConversionPath(body, router);
   }
 
   throw new ProxyError(
@@ -218,8 +218,7 @@ async function handleAnthropicNativePath(
  */
 async function handleAnthropicConversionPath(
   body: AnthropicRequest,
-  router: Router,
-  env: Env
+  router: Router
 ): Promise<Response> {
   const openaiRequest = convertAnthropicRequestToOpenAI(body);
 
