@@ -66,3 +66,22 @@ export function isRetryableError(error: any): boolean {
     error?.message?.toLowerCase().includes('overloaded')
   );
 }
+
+/**
+ * Default timeout for external API calls (milliseconds).
+ * Cloudflare Workers free plan has a 30s CPU limit — leaving 5s for proxy overhead.
+ */
+const PROVIDER_TIMEOUT_MS = 25000;
+
+/**
+ * Wrap a promise with a timeout, throwing on expiry.
+ * The underlying operation continues running but its result is discarded.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms = PROVIDER_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`Provider timeout after ${ms}ms`)), ms);
+    }),
+  ]);
+}

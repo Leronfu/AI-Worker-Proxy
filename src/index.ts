@@ -1,7 +1,7 @@
 import { Env, OpenAIChatRequest, ProviderConfig } from './types';
 import { AnthropicRequest } from './anthropic-types';
 import { Router } from './router';
-import { ProxyError, createErrorResponse } from './utils/error-handler';
+import { ProxyError, createErrorResponse, withTimeout } from './utils/error-handler';
 import { createProvider } from './providers';
 import { AnthropicProvider } from './providers/anthropic';
 import {
@@ -171,7 +171,7 @@ async function handleAnthropicNativePath(
 
     for (const apiKey of apiKeys) {
       try {
-        const result = await provider.nativeChat(body, apiKey);
+        const result = await withTimeout(provider.nativeChat(body, apiKey));
         if (!result.success) {
           lastError = result.error;
           continue;
@@ -201,7 +201,7 @@ async function handleAnthropicNativePath(
   );
   if (otherProviders.length > 0) {
     const router = new Router(env);
-    return handleAnthropicConversionPath(body, router);
+    return handleAnthropicConversionPath(body, router, otherProviders);
   }
 
   throw new ProxyError(
@@ -216,11 +216,12 @@ async function handleAnthropicNativePath(
  */
 async function handleAnthropicConversionPath(
   body: AnthropicRequest,
-  router: Router
+  router: Router,
+  overrideProviders?: ProviderConfig[]
 ): Promise<Response> {
   const openaiRequest = convertAnthropicRequestToOpenAI(body);
 
-  const response = await router.executeWithFallback(openaiRequest, 'anthropic');
+  const response = await router.executeWithFallback(openaiRequest, 'anthropic', overrideProviders);
 
   if (!response.success) {
     throw new ProxyError(response.error || 'All providers failed', response.statusCode || 500);
@@ -274,6 +275,8 @@ function resolveApiKeys(config: ProviderConfig, env: Env): string[] {
     const value = env[keyName];
     if (value) {
       keys.push(value);
+    } else {
+      console.warn(`[resolveApiKeys] API key not found in env: ${keyName}`);
     }
   }
   return keys;

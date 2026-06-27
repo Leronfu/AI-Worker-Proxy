@@ -132,11 +132,17 @@ export function convertOpenAIResponseToAnthropic(
   // Add tool calls
   if (message.tool_calls) {
     for (const tc of message.tool_calls) {
+      let parsedInput: unknown;
+      try {
+        parsedInput = JSON.parse(tc.function.arguments);
+      } catch {
+        parsedInput = {};
+      }
       content.push({
         type: 'tool_use',
         id: tc.id,
         name: tc.function.name,
-        input: JSON.parse(tc.function.arguments),
+        input: parsedInput,
       });
     }
   }
@@ -218,106 +224,139 @@ export class AnthropicStreamAdapter {
 
   createTransformStream(): TransformStream<Uint8Array, Uint8Array> {
     let currentToolIndex = -1;
+    let lineBuffer = '';
 
     return new TransformStream({
       transform: (chunk, controller) => {
-        const text = new TextDecoder().decode(chunk);
+        // Use { stream: true } for proper multi-byte UTF-8 handling across chunks
+        const text = lineBuffer + new TextDecoder().decode(chunk, { stream: true });
         const lines = text.split('\n');
 
+        // Last element may be a partial line — keep it in the buffer for the next chunk
+        lineBuffer = lines.pop() || '';
+
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(6).trim();
-          if (payload === '[DONE]') continue;
-
-          const parsed = JSON.parse(payload);
-          const choice = parsed.choices?.[0];
-          if (!choice) continue;
-
-          const { delta, finish_reason } = choice;
-
-          // Start message on first chunk
-          if (!this.started) {
-            this.started = true;
-            this.startMessage(controller);
-          }
-
-          // Text content delta
-          if (delta.content !== undefined && delta.content !== null) {
-            if (!this.textBlockActive && !this.toolBlockActive) {
-              this.startTextBlock(controller);
-            }
-            controller.enqueue(
-              this.encodeSSE('content_block_delta', {
-                type: 'content_block_delta',
-                index: this.blockIndex,
-                delta: { type: 'text_delta', text: delta.content },
-              })
-            );
-          }
-
-          // Tool call delta
-          if (delta.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              if (tc.id) {
-                // Close current text block
-                if (this.textBlockActive) {
-                  this.stopBlock(controller);
-                }
-
-                currentToolIndex++;
-                this.blockIndex = currentToolIndex;
-                this.toolBlockActive = true;
-
-                controller.enqueue(
-                  this.encodeSSE('content_block_start', {
-                    type: 'content_block_start',
-                    index: this.blockIndex,
-                    content_block: {
-                      type: 'tool_use',
-                      id: tc.id,
-                      name: tc.function?.name || '',
-                      input: {},
-                    },
-                  })
-                );
-              }
-
-              if (tc.function?.arguments !== undefined) {
-                controller.enqueue(
-                  this.encodeSSE('content_block_delta', {
-                    type: 'content_block_delta',
-                    index: this.blockIndex,
-                    delta: {
-                      type: 'input_json_delta',
-                      partial_json: tc.function.arguments,
-                    },
-                  })
-                );
-              }
-            }
-          }
-
-          // Finish reason
-          if (finish_reason) {
-            if (this.textBlockActive || this.toolBlockActive) {
-              this.stopBlock(controller);
-            }
-
-            controller.enqueue(
-              this.encodeSSE('message_delta', {
-                type: 'message_delta',
-                delta: {
-                  stop_reason: mapFinishReason(finish_reason),
-                  stop_sequence: null,
-                },
-                usage: { output_tokens: 0 },
-              })
-            );
-
-            controller.enqueue(this.encodeSSE('message_stop', { type: 'message_stop' }));
-          }
+          currentToolIndex = this.processSSELine(line, controller, currentToolIndex);
         }
       },
+      flush: (controller) => {
+        // Process any remaining buffered data
+        if (lineBuffer) {
+          this.processSSELine(lineBuffer, controller, currentToolIndex);
+        }
+        lineBuffer = '';
+      },
     });
+  }
+
+  /**
+   * Process a single SSE line and return the updated tool call index.
+   */
+  private processSSELine(
+    line: string,
+    controller: TransformStreamDefaultController,
+    toolIndex: number
+  ): number {
+    if (!line.startsWith('data: ')) return toolIndex;
+    const payload = line.slice(6).trim();
+    if (payload === '[DONE]') return toolIndex;
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(payload);
+    } catch {
+      // Invalid JSON in SSE — skip this line
+      return toolIndex;
+    }
+
+    const choice = parsed.choices?.[0];
+    if (!choice) return toolIndex;
+
+    const { delta, finish_reason } = choice;
+    let currentToolIndex = toolIndex;
+
+    // Start message on first chunk
+    if (!this.started) {
+      this.started = true;
+      this.startMessage(controller);
+    }
+
+    // Text content delta
+    if (delta.content !== undefined && delta.content !== null) {
+      if (!this.textBlockActive && !this.toolBlockActive) {
+        this.startTextBlock(controller);
+      }
+      controller.enqueue(
+        this.encodeSSE('content_block_delta', {
+          type: 'content_block_delta',
+          index: this.blockIndex,
+          delta: { type: 'text_delta', text: delta.content },
+        })
+      );
+    }
+
+    // Tool call delta
+    if (delta.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        if (tc.id) {
+          // Close current text block
+          if (this.textBlockActive) {
+            this.stopBlock(controller);
+          }
+
+          currentToolIndex++;
+          this.blockIndex = currentToolIndex;
+          this.toolBlockActive = true;
+
+          controller.enqueue(
+            this.encodeSSE('content_block_start', {
+              type: 'content_block_start',
+              index: this.blockIndex,
+              content_block: {
+                type: 'tool_use',
+                id: tc.id,
+                name: tc.function?.name || '',
+                input: {},
+              },
+            })
+          );
+        }
+
+        if (tc.function?.arguments !== undefined) {
+          controller.enqueue(
+            this.encodeSSE('content_block_delta', {
+              type: 'content_block_delta',
+              index: this.blockIndex,
+              delta: {
+                type: 'input_json_delta',
+                partial_json: tc.function.arguments,
+              },
+            })
+          );
+        }
+      }
+    }
+
+    // Finish reason
+    if (finish_reason) {
+      if (this.textBlockActive || this.toolBlockActive) {
+        this.stopBlock(controller);
+      }
+
+      controller.enqueue(
+        this.encodeSSE('message_delta', {
+          type: 'message_delta',
+          delta: {
+            stop_reason: mapFinishReason(finish_reason),
+            stop_sequence: null,
+          },
+          usage: { output_tokens: 0 },
+        })
+      );
+
+      controller.enqueue(this.encodeSSE('message_stop', { type: 'message_stop' }));
+    }
+
+    return currentToolIndex;
   }
 }

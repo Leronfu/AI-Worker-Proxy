@@ -38,6 +38,28 @@ export class AnthropicProvider extends BaseProvider {
         params.tools = tools;
       }
 
+      // Map OpenAI stop to Anthropic stop_sequences
+      if (request.stop) {
+        params.stop_sequences = Array.isArray(request.stop) ? request.stop : [request.stop];
+      }
+
+      // Map OpenAI tool_choice to Anthropic tool_choice
+      if (request.tool_choice) {
+        if (request.tool_choice === 'none') {
+          params.tool_choice = { type: 'none' };
+        } else if (request.tool_choice === 'auto') {
+          params.tool_choice = { type: 'auto' };
+        } else if (
+          typeof request.tool_choice === 'object' &&
+          request.tool_choice.type === 'function'
+        ) {
+          params.tool_choice = {
+            type: 'tool',
+            name: request.tool_choice.function.name,
+          };
+        }
+      }
+
       if (request.stream) {
         return this.handleStream(client, params);
       }
@@ -240,11 +262,18 @@ export class AnthropicProvider extends BaseProvider {
 
         if (msg.tool_calls) {
           for (const toolCall of msg.tool_calls) {
+            let parsedInput: unknown;
+            try {
+              parsedInput = JSON.parse(toolCall.function.arguments);
+            } catch (e) {
+              // Fall back to empty object if arguments are not valid JSON
+              parsedInput = {};
+            }
             content.push({
               type: 'tool_use',
               id: toolCall.id,
               name: toolCall.function.name,
-              input: JSON.parse(toolCall.function.arguments),
+              input: parsedInput,
             });
           }
         }

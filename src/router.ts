@@ -55,14 +55,16 @@ export class Router {
    */
   async executeWithFallback(
     request: OpenAIChatRequest,
-    preferredType?: 'openai' | 'anthropic'
+    preferredType?: 'openai' | 'anthropic',
+    overrideProviders?: ProviderConfig[]
   ): Promise<ProviderResponse> {
     const model = request.model;
     if (!model) {
       throw new ProxyError('Model name is required', 400);
     }
 
-    const providers = this.getProvidersForModel(model);
+    // Use override providers if provided, otherwise look up from config
+    const providers = overrideProviders ?? this.getProvidersForModel(model);
 
     // Reorder: preferred type first, rest after
     const orderedProviders = preferredType
