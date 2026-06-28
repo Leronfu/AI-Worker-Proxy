@@ -174,6 +174,14 @@ async function handleAnthropicNativePath(
     const provider = createProvider(config, env) as AnthropicProvider;
     const apiKeys = resolveApiKeys(config, env);
 
+    if (apiKeys.length === 0) {
+      console.warn(
+        `[AnthropicNativePath] No API keys found for provider: ${config.provider}/${config.model}`
+      );
+      lastError = new Error(`No API keys configured for ${config.provider}/${config.model}`);
+      continue;
+    }
+
     for (const apiKey of apiKeys) {
       try {
         const result = await withTimeout(provider.nativeChat(body, apiKey));
@@ -251,7 +259,11 @@ async function handleAnthropicConversionPath(
     });
   }
 
-  return json(convertOpenAIResponseToAnthropic(response.response!, body.model));
+  if (!response.response) {
+    throw new ProxyError('Provider returned success but no response data', 502);
+  }
+
+  return json(convertOpenAIResponseToAnthropic(response.response, body.model));
 }
 
 // =============================================================================

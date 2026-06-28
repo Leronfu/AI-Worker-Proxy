@@ -24,7 +24,7 @@ export class AnthropicProvider extends BaseProvider {
       const params: any = {
         model: this.model,
         messages,
-        max_tokens: request.max_tokens || 4096,
+        max_tokens: request.max_tokens ?? 4096,
         temperature: request.temperature,
         top_p: request.top_p,
         stream: request.stream || false,
@@ -84,7 +84,7 @@ export class AnthropicProvider extends BaseProvider {
       const params: Record<string, unknown> = {
         model: request.model,
         messages: request.messages,
-        max_tokens: request.max_tokens || 4096,
+        max_tokens: request.max_tokens ?? 4096,
         stream: request.stream || false,
       };
 
@@ -98,6 +98,10 @@ export class AnthropicProvider extends BaseProvider {
       // Pass tools directly (they're already in Anthropic format)
       if (request.tools && request.tools.length > 0) {
         params.tools = request.tools;
+      }
+
+      if (request.tool_choice) {
+        params.tool_choice = request.tool_choice;
       }
 
       if (request.stream) {

@@ -36,6 +36,7 @@ export interface AnthropicRequest {
   top_p?: number;
   top_k?: number;
   tools?: AnthropicTool[];
+  tool_choice?: { type: 'auto' | 'any' | 'tool'; name?: string };
 }
 
 export interface AnthropicTool {
@@ -66,16 +67,3 @@ export type AnthropicStreamEventType =
   | 'message_delta'
   | 'message_stop'
   | 'ping';
-
-export interface AnthropicStreamChunk {
-  event: AnthropicStreamEventType;
-  data: unknown;
-}
-
-export interface AnthropicNativeResult {
-  success: boolean;
-  response?: AnthropicResponse;
-  stream?: ReadableStream<Uint8Array>;
-  error?: string;
-  statusCode?: number;
-}

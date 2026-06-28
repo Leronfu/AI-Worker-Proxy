@@ -83,8 +83,8 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
   const openAIReq: OpenAIChatRequest = {
     model: anthropicReq.model,
     messages,
-    max_tokens: anthropicReq.max_tokens || 4096,
-    stream: anthropicReq.stream || false,
+    max_tokens: anthropicReq.max_tokens ?? 4096,
+    stream: anthropicReq.stream ?? false,
   };
 
   if (anthropicReq.temperature !== undefined) openAIReq.temperature = anthropicReq.temperature;
