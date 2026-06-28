@@ -1,8 +1,23 @@
 // OpenAI API types
 
+export interface TextContentPart {
+  type: 'text';
+  text: string;
+}
+
+export interface ImageContentPart {
+  type: 'image_url';
+  image_url: {
+    url: string;
+    detail?: 'low' | 'high' | 'auto';
+  };
+}
+
+export type ContentPart = TextContentPart | ImageContentPart;
+
 export interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
-  content: string | null;
+  content: string | ContentPart[] | null;
   name?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;

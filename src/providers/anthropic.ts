@@ -173,9 +173,11 @@ export class AnthropicProvider extends BaseProvider {
               await writer.write(session.textChunk(event.delta.text));
             } else if (event.delta.type === 'input_json_delta') {
               // Stream arguments incrementally
-              await writer.write(
-                session.toolCallArgsChunk(toolCallIndex, event.delta.partial_json)
-              );
+              if (toolCallIndex >= 0) {
+                await writer.write(
+                  session.toolCallArgsChunk(toolCallIndex, event.delta.partial_json)
+                );
+              }
             }
           } else if (event.type === 'message_stop') {
             const reason = hasToolCalls ? 'tool_calls' : 'stop';
@@ -252,12 +254,34 @@ export class AnthropicProvider extends BaseProvider {
 
     for (const msg of messages) {
       if (msg.role === 'system') {
-        system = msg.content || '';
+        system = typeof msg.content === 'string' ? msg.content : (msg.content ? msg.content.map(p => p.type === 'text' ? p.text : '').join(' ') : '');
       } else if (msg.role === 'user' || msg.role === 'assistant') {
         const content: any[] = [];
 
         if (msg.content) {
-          content.push({ type: 'text', text: msg.content });
+          if (typeof msg.content === 'string') {
+            content.push({ type: 'text', text: msg.content });
+          } else {
+            for (const part of msg.content) {
+              if (part.type === 'text') {
+                content.push({ type: 'text', text: part.text });
+              } else if (part.type === 'image_url') {
+                // Parse data URI to extract mime type and base64 data
+                const dataUri = part.image_url.url;
+                const commaIdx = dataUri.indexOf(',');
+                if (commaIdx !== -1) {
+                  const header = dataUri.slice(0, commaIdx);
+                  const base64Data = dataUri.slice(commaIdx + 1);
+                  const mimeMatch = header.match(/^data:([^;]+)/);
+                  const mediaType = mimeMatch ? mimeMatch[1] : 'image/png';
+                  content.push({
+                    type: 'image',
+                    source: { type: 'base64', media_type: mediaType, data: base64Data },
+                  });
+                }
+              }
+            }
+          }
         }
 
         if (msg.tool_calls) {
@@ -282,13 +306,14 @@ export class AnthropicProvider extends BaseProvider {
           convertedMessages.push({ role: msg.role, content });
         }
       } else if (msg.role === 'tool') {
+        const toolContent = typeof msg.content === 'string' ? (msg.content || '') : (msg.content ? msg.content.map(p => p.type === 'text' ? p.text : '').join(' ') : '');
         convertedMessages.push({
           role: 'user',
           content: [
             {
               type: 'tool_result',
               tool_use_id: msg.tool_call_id!,
-              content: msg.content || '',
+              content: toolContent,
             },
           ],
         });

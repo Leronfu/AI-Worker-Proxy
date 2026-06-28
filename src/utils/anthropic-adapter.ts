@@ -1,5 +1,5 @@
 import { AnthropicRequest, AnthropicResponse, AnthropicContentBlock } from '../anthropic-types';
-import { OpenAIChatRequest, OpenAIChatResponse, OpenAIMessage } from '../types';
+import { OpenAIChatRequest, OpenAIChatResponse, OpenAIMessage, ContentPart } from '../types';
 
 /**
  * Convert an Anthropic-format request to OpenAI-format request.
@@ -19,13 +19,18 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
       messages.push({ role: msg.role, content: msg.content });
     } else {
       // Content is an array of blocks
-      const textParts: string[] = [];
+      const contentParts: ContentPart[] = [];
       for (const block of msg.content) {
         if (block.type === 'text' && block.text) {
-          textParts.push(block.text);
+          contentParts.push({ type: 'text', text: block.text });
         } else if (block.type === 'image' && block.source) {
           // Convert Anthropic image block to OpenAI image_url format
-          textParts.push(`data:${block.source.media_type};base64,${block.source.data}`);
+          contentParts.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${block.source.media_type};base64,${block.source.data}`,
+            },
+          });
         } else if (block.type === 'tool_result') {
           // Tool results in Anthropic are content blocks in user messages;
           // in OpenAI they are separate messages with role 'tool'
@@ -63,8 +68,14 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
           continue; // Already pushed
         }
       }
-      if (textParts.length > 0) {
-        messages.push({ role: msg.role, content: textParts.join(' ') });
+      if (contentParts.length > 0) {
+        // Pure single text part — keep as string for backward compatibility
+        if (contentParts.length === 1 && contentParts[0].type === 'text') {
+          messages.push({ role: msg.role, content: contentParts[0].text });
+        } else {
+          // Has images or mixed content — use structured array format
+          messages.push({ role: msg.role, content: contentParts });
+        }
       }
     }
   }
@@ -126,7 +137,8 @@ export function convertOpenAIResponseToAnthropic(
 
   // Add text content
   if (message.content) {
-    content.push({ type: 'text', text: message.content });
+    const textContent = typeof message.content === 'string' ? message.content : message.content.map(p => p.type === 'text' ? p.text : '').join(' ');
+    content.push({ type: 'text', text: textContent });
   }
 
   // Add tool calls

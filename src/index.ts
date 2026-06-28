@@ -1,7 +1,7 @@
 import { Env, OpenAIChatRequest, ProviderConfig } from './types';
 import { AnthropicRequest } from './anthropic-types';
 import { Router } from './router';
-import { ProxyError, createErrorResponse, withTimeout } from './utils/error-handler';
+import { ProxyError, createErrorResponse, withTimeout, isRetryableError } from './utils/error-handler';
 import { createProvider } from './providers';
 import { AnthropicProvider } from './providers/anthropic';
 import {
@@ -174,6 +174,9 @@ async function handleAnthropicNativePath(
         const result = await withTimeout(provider.nativeChat(body, apiKey));
         if (!result.success) {
           lastError = result.error;
+          if (result.statusCode && ![429, 502, 503].includes(result.statusCode)) {
+            break;
+          }
           continue;
         }
 
@@ -191,6 +194,9 @@ async function handleAnthropicNativePath(
         return json(result.rawResponse);
       } catch (error: any) {
         lastError = error;
+        if (!isRetryableError(error)) {
+          break;
+        }
       }
     }
   }

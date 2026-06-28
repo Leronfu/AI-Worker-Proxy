@@ -36,13 +36,6 @@ export class Router {
       return this.routes[model];
     }
 
-    // Default fallback - use first available route or throw error
-    const defaultRoute = Object.values(this.routes)[0];
-    if (defaultRoute) {
-      console.log(`[Router] No configuration found for model "${model}", using default route`);
-      return defaultRoute;
-    }
-
     throw new ProxyError(`No providers configured for model: ${model}`, 404);
   }
 
